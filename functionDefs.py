@@ -58,6 +58,18 @@ def saveScore (seprsco, fileName, folder='saved/'):
     with open(os.path.join(folder, fileName), 'wb') as f:
         pickle.dump(seprsco, f, protocol=2)
 
+def saveScoreCSV (seprsco, fileName, folder='saved/'):
+    '''
+    save a seprsco file, as adapted from nesmdb
+    input: 
+        seprsco: the tuple of rate, nsamps, seprsco to save the file to
+        fileName: name of the resulting .pkl file
+        folder: folder file to save to
+    '''
+    np.savetxt(os.path.join(folder, fileName), seprsco[2], delimiter=",")
+
+    
+        
 """ old version using dataframes
 def openFolder (folder):
     '''
@@ -156,6 +168,21 @@ def saveFolder(seprscos, folder):
     i = 0
     for seprsco in seprscos:
         saveScore(seprsco, "saved"+str(i)+".seprsco.pkl", folder)
+        i +=1
+
+def saveFolderCSV(seprscos, folder):
+    '''
+    save seprsco files from to folder
+    input: 
+        seprscos: the list of seprscos to save
+        folder: folder to save the files to
+    '''
+    directory = os.path.dirname(folder)
+    if not os.path.exists(directory):
+        os.mkdir(directory)
+    i = 0
+    for seprsco in seprscos:
+        saveScoreCSV(seprsco, "saved"+str(i)+".csv", folder)
         i +=1
 
 
@@ -573,11 +600,11 @@ class NESGAN:
             predictions.append((rate, nsamps, prediction))
         return predictions
     
-    def generateScaled(self, predictNo, channelLengths = [108, 108, 108, 16], endPadding = 100):
+    def generateScaled(self, predictNo, channelLengths = [(108, 32), (108, 32), (108, 21), (16, 1)], endPadding = 100):
         '''
         generate predictions scaled back to an original length (between 0 and N)
             predictNo: the number of predictions to make
-            channelLengsth: the lengths of the challels to scale back to
+            channelLengsth: the lengths of the challels to scale back to, including minimum non-zero numbers can be as a list of tuples
             endPadding: the amount of padding to add to nSamps
         returns a list of result tuples where:
             rate: first part of the tuple, the rate of the song
@@ -590,8 +617,13 @@ class NESGAN:
             noise = tf.random.normal((1, self.latent_dim), 0, 1)
             prediction = self.generator.predict(noise)[0]
             for i in range(4):
-                prediction[:,i] = (prediction[:, i] * channelLengths[i]/2) + (channelLengths[i]/2)
-            nsamps = prediction.shape[1] + endPadding
+                prediction[:, i] = (prediction[:, i] * channelLengths[i][0]/2) + (channelLengths[i][0]/2)
+                prediction[:, i] = np.where(prediction[:, i] < (channelLengths[i][1]/2), 0, prediction[:, i])
+                prediction[:, i] = np.where(
+                    np.logical_and(prediction[:, i] >= (channelLengths[i][1]/2), prediction[:, i] < (channelLengths[i][1])),
+                    channelLengths[i][1], prediction[:, i]
+                )
+            nsamps = 4*prediction.shape[1] + endPadding
             
             predictions.append((rate, nsamps, prediction.astype(int)))
         return predictions
